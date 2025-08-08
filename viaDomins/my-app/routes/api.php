@@ -29,3 +29,4 @@ Route::post('/domaines/store-multiple', [DomaineController::class, 'storeMultipl
 
 Route::get('/domaines/{id}', [DomaineController::class, 'show']);
 
+Route::post('/domains', [DomaineController::class, 'storeDomains']);

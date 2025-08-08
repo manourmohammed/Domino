@@ -2,12 +2,104 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Domaine;
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Http;
+use App\Http\Requests\DomainsListRequest;
 
 class DomaineController extends Controller
 {
+    protected function validDate(?string $date): ?string
+    {
+        if (!$date) {
+            return null;
+        }
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ? $date : null;
+    }
+
+    protected function validInt($value): int
+    {
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+        return 0;
+    }
+
+  public function storeDomains(DomainsListRequest $request)
+{
+    $validatedRequest = $request->validated();
+
+    $response = Http::timeout(120)->post("http://localhost:8001/api/domains/check", [
+        "domains" => $validatedRequest["domains"]
+    ]);
+
+    $domainsData = $response->json();
+
+    $savedDomains = [];
+    $errors = [];
+
+    foreach ($domainsData as $domainData) {
+        if (\App\Models\Domaine::where('nom', $domainData['nom'])->exists()) {
+            $errors[] = [
+                'domain' => $domainData['nom'],
+                'error' => 'Domain already exists'
+            ];
+            continue; 
+        }
+
+        $domaine = \App\Models\Domaine::create([
+            'nom' => $domainData['nom'],
+            'en_ligne' => $domainData['en_ligne'] ?? false,
+            'statut' => $domainData['statut'] ?? null,
+            'date_expiration' => $this->validDate($domainData['date_expiration'] ?? null),
+            'cms' => $domainData['cms'] ?? null,
+            'availability' => $domainData['availability'] ?? null,
+            'response_time' => $domainData['response_time'] ?? null
+        ]);
+
+        // CMS details
+        if (!empty($domainData['cms_details'])) {
+            $domaine->cmsDetail()->create([
+                'cms' => $domainData['cms_details']['cms'] ?? null,
+                'version' => $domainData['cms_details']['version'] ?? null,
+                'theme' => $domainData['cms_details']['theme'] ?? null,
+                'plugins_detectes' => $this->validInt($domainData['cms_details']['plugins_detectes'] ?? 0),
+            ]);
+        }
+
+        // Whois details
+        if (!empty($domainData['whois'])) {
+            $domaine->whoisDetail()->create([
+                'date_creation' => $this->validDate($domainData['whois']['date_creation'] ?? null),
+                'registrar' => $domainData['whois']['registrar'] ?? null,
+                'dns' => $domainData['whois']['dns'] ?? null,
+            ]);
+        }
+
+        // Network details
+        if (!empty($domainData['network'])) {
+            $domaine->networkDetail()->create([
+                'ping' => $domainData['network']['ping'] ?? null,
+                'http_status' => $domainData['network']['http_status'] ?? null,
+                'ssl_expiration' => $domainData['network']['ssl_expiration'] ?? null,
+                'adress_ip' => $domainData['network']['adress_ip'] ?? null,
+                'server_location' => $domainData['network']['server_location'] ?? null,
+            ]);
+        }
+
+        $savedDomains[] = $domaine;
+    }
+
+    return response()->json([
+        "message" => "Domaines analysés.",
+        "result" => $savedDomains,
+        "errors" => $errors
+    ]);
+}
+
+
+
     public function storeFull(Request $request)
     {
         $validated = $request->validate([
@@ -29,7 +121,7 @@ class DomaineController extends Controller
             'statut' => $request->statut,
             'date_expiration' => $request->date_expiration,
             'cms' => $request->cms,
-            'availability' => $request->availability ,
+            'availability' => $request->availability,
             'response_time' => $request->response_time
         ]);
 
@@ -118,7 +210,7 @@ class DomaineController extends Controller
                 ], 200);
             }
 
-            $alerts = $domaines->map(function($domaine) {
+            $alerts = $domaines->map(function ($domaine) {
                 return [
                     'id' => $domaine->id,
                     'domain' => $domaine->nom,
@@ -130,7 +222,6 @@ class DomaineController extends Controller
             });
 
             return response()->json($alerts);
-
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Erreur serveur',

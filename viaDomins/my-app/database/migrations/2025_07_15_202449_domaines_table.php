@@ -15,12 +15,13 @@ return new class extends Migration
             $table->id();
             $table->string('nom')->unique();
             $table->boolean('en_ligne')->default(false);
-            $table->string('statut')->nullable(); // Valide / Expiré / Bientôt
+            $table->string('statut')->nullable();
             $table->date('date_expiration')->nullable();
-            $table->string('cms')->nullable(); // WordPress, Joomla, etc.
+            $table->string('cms')->nullable();
+            $table->decimal('availability', 5, 2)->nullable(); // 0.00 to 100.00
+            $table->decimal('response_time', 8, 3)->nullable(); // ms or seconds
             $table->timestamps();
         });
-
     }
 
     /**

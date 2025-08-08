@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-whois
+requests
+bs4
+beautifulsoup4
+geoip2
